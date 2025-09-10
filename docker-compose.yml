@@ -1,0 +1,93 @@
+volumes:
+  postgres_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+networks:
+  n8n_network:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - n8n_network
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Core Configuration
+      - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+
+      # Database Configuration
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_SCHEMA=public
+
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+
+      # Production Configuration
+      - N8N_HOST=${N8N_DOMAIN}
+      - N8N_PROTOCOL=https
+      - N8N_PORT=443
+      - WEBHOOK_URL=https://${N8N_DOMAIN}
+      - N8N_EDITOR_BASE_URL=https://${N8N_DOMAIN}
+
+      # Security Configuration
+      - N8N_SECURE_COOKIE=true
+      - WEBHOOK_TUNNEL_URL= # Disable built-in tunnel service in production
+
+      # Execution Data Configuration
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336 # Keep executions for 14 days
+
+      # Concurrency Configuration
+      - N8N_CONCURRENCY_PRODUCTION=${N8N_CONCURRENCY}
+
+      # Timezone Configuration
+      - TZ=Asia/Jerusalem
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - n8n_network
+    expose:
+      - "5678"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:5678/healthz",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
