@@ -30,6 +30,19 @@ else
     echo "✅ Docker already installed"
 fi
 
+# Start Docker service
+echo "Starting Docker service..."
+sudo systemctl enable docker
+sudo systemctl start docker
+
+# Check if user was added to docker group and inform about restart
+if groups $USER | grep -q '\bdocker\b'; then
+    echo "✅ User already in docker group"
+else
+    echo "⚠️  User added to docker group - you may need to logout and login again"
+    echo "    Or run: newgrp docker"
+fi
+
 # Install Docker Compose
 echo "🔧 Installing Docker Compose..."
 if ! command -v docker-compose &>/dev/null; then
@@ -58,11 +71,25 @@ sudo chmod 600 .env
 
 echo "✅ Security keys generated and updated in .env file"
 
-# Start Docker service
-echo "🔄 Starting Docker service..."
-sudo systemctl enable docker
-sudo systemctl start docker
+# Create data directories and set permissions
+echo "📁 Creating data directories..."
+mkdir -p data/postgres data/n8n
+sudo chown -R 999:999 data/postgres # PostgreSQL user
+sudo chown -R 1000:1000 data/n8n    # Node user for n8n
 
-# Start N8N services
-echo "🎯 Starting N8N services..."
-sudo docker compose up -d
+echo ""
+echo "🎉 N8N deployment completed successfully!"
+echo ""
+echo "📋 Next steps:"
+echo "1. Update your .env file with your actual domain name:"
+echo "   N8N_DOMAIN=your-domain.com"
+echo ""
+echo "2. Configure your external nginx to proxy to this server"
+echo "   The n8n service will be available on port 5678"
+echo ""
+echo "3. Start the services after updating .env:"
+echo "   docker compose up -d"
+echo ""
+echo "4. Check services status:"
+echo "   docker compose ps"
+echo "   docker compose logs -f"
