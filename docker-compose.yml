@@ -14,7 +14,7 @@ services:
     networks:
       - n8n_network
     expose:
-      - "5432" # Only accessible within the Docker network
+      - "5432"  # Only accessible within the Docker network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -31,7 +31,7 @@ services:
     networks:
       - n8n_network
     expose:
-      - "6379" # Only accessible within the Docker network
+      - "6379"  # Only accessible within the Docker network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -83,14 +83,15 @@ services:
       - N8N_PORT=5678
       - WEBHOOK_URL=https://${N8N_DOMAIN}
       - N8N_EDITOR_BASE_URL=https://${N8N_DOMAIN}
+      - N8N_DISABLE_PRODUCTION_MAIN_PROCESS=true
 
       # Security Configuration
       - N8N_SECURE_COOKIE=false
-      - WEBHOOK_TUNNEL_URL= # Disable built-in tunnel service in production
+      - WEBHOOK_TUNNEL_URL=  # Disable built-in tunnel service in production
 
       # Execution Data Configuration
-      - EXECUTIONS_DATA_PRUNE=true # Enable execution data pruning
-      - EXECUTIONS_DATA_MAX_AGE=336 # Keep executions for 14 days
+      - EXECUTIONS_DATA_PRUNE=true   # Enable execution data pruning
+      - EXECUTIONS_DATA_MAX_AGE=336  # Keep executions for 14 days
 
       # Web-only mode (no workflow execution)
       - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
