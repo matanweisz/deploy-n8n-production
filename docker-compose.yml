@@ -14,7 +14,7 @@ services:
     networks:
       - n8n_network
     expose:
-      - "5432"  # Only accessible within the Docker network
+      - "5432" # Only accessible within the Docker network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -31,7 +31,7 @@ services:
     networks:
       - n8n_network
     expose:
-      - "6379"  # Only accessible within the Docker network
+      - "6379" # Only accessible within the Docker network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -66,7 +66,6 @@ services:
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_SCHEMA=public
-
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
@@ -83,18 +82,16 @@ services:
       - N8N_PORT=5678
       - WEBHOOK_URL=https://${N8N_DOMAIN}
       - N8N_EDITOR_BASE_URL=https://${N8N_DOMAIN}
-      - N8N_DISABLE_PRODUCTION_MAIN_PROCESS=true
 
       # Security Configuration
       - N8N_SECURE_COOKIE=false
-      - WEBHOOK_TUNNEL_URL=  # Disable built-in tunnel service in production
+      - WEBHOOK_TUNNEL_URL= # Disable built-in tunnel service in production
 
       # Execution Data Configuration
-      - EXECUTIONS_DATA_PRUNE=true   # Enable execution data pruning
-      - EXECUTIONS_DATA_MAX_AGE=336  # Keep executions for 14 days
+      - EXECUTIONS_DATA_PRUNE=true # Enable execution data pruning
+      - EXECUTIONS_DATA_MAX_AGE=336 # Keep executions for 14 days
 
-      # Web-only mode (no workflow execution)
-      - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
+      - QUEUE_HEALTH_CHECK_ACTIVE=true
 
       # Timezone Configuration
       - TZ=Asia/Jerusalem
@@ -113,11 +110,11 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://0.0.0.0:5678/healthz",
+          "http://localhost:5678/healthz",
         ]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 30s
 
   # N8N Worker Instances (handles workflow execution)
@@ -129,6 +126,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      n8n-web:
+        condition: service_healthy
     environment:
       # Same database and Redis config as n8n-web
       - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
@@ -139,7 +138,6 @@ services:
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_SCHEMA=public
-
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
@@ -156,6 +154,8 @@ services:
       - EXECUTIONS_DATA_MAX_AGE=336
       - TZ=Asia/Jerusalem
 
+      - QUEUE_HEALTH_CHECK_ACTIVE=true
+
     volumes:
       - ./data/n8n:/home/node/.n8n
     networks:
@@ -166,10 +166,10 @@ services:
     deploy:
       replicas: 1
     healthcheck:
-      test: ["CMD", "sh", "-c", "pgrep -f 'n8n worker' > /dev/null"]
+      test: ["CMD", "sh", "-c", "pgrep -f 'n8n worker' > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 30s
 
 networks:
