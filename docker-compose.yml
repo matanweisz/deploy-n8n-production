@@ -78,14 +78,14 @@ services:
       - QUEUE_BULL_REDIS_DB=0
 
       # Production Configuration
-      - N8N_HOST=${N8N_DOMAIN}
+      - N8N_HOST=0.0.0.0
       - N8N_PROTOCOL=http
       - N8N_PORT=5678
       - WEBHOOK_URL=https://${N8N_DOMAIN}
       - N8N_EDITOR_BASE_URL=https://${N8N_DOMAIN}
 
       # Security Configuration
-      - N8N_SECURE_COOKIE=true # Enable cookie encryption
+      - N8N_SECURE_COOKIE=false
       - WEBHOOK_TUNNEL_URL= # Disable built-in tunnel service in production
 
       # Execution Data Configuration
@@ -112,7 +112,7 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://localhost:5678/healthz",
+          "http://0.0.0.0:5678/healthz",
         ]
       interval: 30s
       timeout: 10s
@@ -132,10 +132,13 @@ services:
       # Same database and Redis config as n8n-web
       - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+
+      # Database Configuration
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_SCHEMA=public
+
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
@@ -151,6 +154,7 @@ services:
       - EXECUTIONS_DATA_PRUNE=true
       - EXECUTIONS_DATA_MAX_AGE=336
       - TZ=Asia/Jerusalem
+
     volumes:
       - ./data/n8n:/home/node/.n8n
     networks:
@@ -159,7 +163,7 @@ services:
     command: n8n worker
     # Scale workers with: docker-compose up -d --scale n8n-worker=3
     deploy:
-      replicas: 2
+      replicas: 1
     healthcheck:
       test: ["CMD", "sh", "-c", "pgrep -f 'n8n worker' > /dev/null"]
       interval: 30s
