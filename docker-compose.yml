@@ -1,4 +1,6 @@
+---
 services:
+  # Postgres Database For N8N Persistent Data
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -20,11 +22,39 @@ services:
       retries: 5
       start_period: 10s
 
-  n8n:
+  # Redis For Caching And N8N Queue Mode (Job Queue)
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - n8n_network
+    expose:
+      - "6379" # Only accessible within the Docker network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Redis optimization for production
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 600 1
+      --save 300 10
+
+  # N8N Web Interface (UI + API Only)
+  n8n-web:
     image: n8nio/n8n:latest
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       # Core Configuration
@@ -41,12 +71,18 @@ services:
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
 
+      # Redis Queue Configuration
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_DB=0
+
       # Production Configuration
       - N8N_HOST=${N8N_DOMAIN}
       - N8N_PROTOCOL=http
       - N8N_PORT=5678
-      - WEBHOOK_URL=http://${N8N_DOMAIN}
-      - N8N_EDITOR_BASE_URL=http://${N8N_DOMAIN}
+      - WEBHOOK_URL=https://${N8N_DOMAIN}
+      - N8N_EDITOR_BASE_URL=https://${N8N_DOMAIN}
 
       # Security Configuration
       - N8N_SECURE_COOKIE=true # Enable cookie encryption
@@ -56,17 +92,18 @@ services:
       - EXECUTIONS_DATA_PRUNE=true # Enable execution data pruning
       - EXECUTIONS_DATA_MAX_AGE=336 # Keep executions for 14 days
 
-      # Concurrency Configuration
-      - N8N_CONCURRENCY_PRODUCTION=${N8N_CONCURRENCY}
+      # Web-only mode (no workflow execution)
+      - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
 
       # Timezone Configuration
       - TZ=Asia/Jerusalem
     volumes:
-      - ./data/n8n:/home/node/.n8n
+      - ./data/n8n:/home/node/.n8n # N8N Temporary Files
     networks:
       - n8n_network
     ports:
       - "5678:5678"
+    command: n8n start
     healthcheck:
       test:
         [
@@ -77,6 +114,54 @@ services:
           "--spider",
           "http://localhost:5678/healthz",
         ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # N8N Worker Instances (handles workflow execution)
+  n8n-worker:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Same database and Redis config as n8n-web
+      - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_SCHEMA=public
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+
+      # Queue Configuration
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_DB=0
+
+      # Worker-specific settings
+      - N8N_CONCURRENCY_PRODUCTION=${N8N_CONCURRENCY:-10}
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336
+      - TZ=Asia/Jerusalem
+    volumes:
+      - ./data/n8n:/home/node/.n8n
+    networks:
+      - n8n_network
+    # Worker mode - only processes workflows
+    command: n8n worker
+    # Scale workers with: docker-compose up -d --scale n8n-worker=3
+    deploy:
+      replicas: 2
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pgrep -f 'n8n worker' > /dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3
