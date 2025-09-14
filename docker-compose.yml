@@ -69,6 +69,7 @@ services:
 
       # Execution Mode
       - EXECUTIONS_MODE=regular
+      - N8N_RUNNERS_ENABLED=true
 
       # Production Configuration
       - N8N_HOST=0.0.0.0
@@ -78,15 +79,16 @@ services:
       - N8N_EDITOR_BASE_URL=https://${N8N_DOMAIN}
       - NODE_ENV=production
 
+      # Origin and CORS Configuration
+      - N8N_ALLOWED_ORIGINS=https://${N8N_DOMAIN}
+      - N8N_CORS_ORIGIN=https://${N8N_DOMAIN}
+
       # Security Configuration
       - N8N_SECURE_COOKIE=false # nginx handles SSL
       - WEBHOOK_TUNNEL_URL= # Disable built-in tunnel service in production
 
       # Performance Configuration - Optimized for 16GB RAM server
       - N8N_CONCURRENCY_PRODUCTION=${N8N_CONCURRENCY:-25} # 25 threads
-      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
-      - N8N_BINARY_DATA_TTL=120 # 2 hours of TTL for larger server
-      - N8N_BINARY_DATA_STORAGE_PATH=/home/node/.n8n/binaryData
 
       # Execution Data Configuration
       - EXECUTIONS_DATA_PRUNE=true # Enable execution data pruning
@@ -107,10 +109,6 @@ services:
 
       # Memory and Performance - Optimized for large server
       - NODE_OPTIONS=--max-old-space-size=6144 # 6GB heap for Node.js
-
-      # Additional performance settings
-      - N8N_PUSH_BACKEND=sse # Server-sent events for better performance
-      - N8N_PERSONALIZATION_ENABLED=false
 
     volumes:
       - ./data/n8n:/home/node/.n8n # N8N Temporary Files
