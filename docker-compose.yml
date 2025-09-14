@@ -21,15 +21,31 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    # Production PostgreSQL optimizations
+    # PostgreSQL optimizations for 16GB RAM server
     command: >
       postgres
       -c shared_preload_libraries=pg_stat_statements
-      -c max_connections=200
-      -c shared_buffers=256MB
-      -c effective_cache_size=1GB
-      -c work_mem=4MB
-      -c maintenance_work_mem=64MB
+      -c max_connections=300
+      -c shared_buffers=2GB
+      -c effective_cache_size=12GB
+      -c work_mem=16MB
+      -c maintenance_work_mem=512MB
+      -c checkpoint_completion_target=0.7
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+    # Resource allocation for PostgreSQL
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+        reservations:
+          memory: 1G
+          cpus: "0.5"
 
   n8n:
     image: n8nio/n8n:1.110.1
@@ -63,25 +79,39 @@ services:
       - NODE_ENV=production
 
       # Security Configuration
-      - N8N_SECURE_COOKIE=false  # nginx handles SSL
-      - WEBHOOK_TUNNEL_URL=      # Disable built-in tunnel service in production
+      - N8N_SECURE_COOKIE=false # nginx handles SSL
+      - WEBHOOK_TUNNEL_URL= # Disable built-in tunnel service in production
+
+      # Performance Configuration - Optimized for 16GB RAM server
+      - N8N_CONCURRENCY_PRODUCTION=${N8N_CONCURRENCY:-25} # 25 threads
+      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+      - N8N_BINARY_DATA_TTL=120 # 2 hours of TTL for larger server
+      - N8N_BINARY_DATA_STORAGE_PATH=/home/node/.n8n/binaryData
 
       # Execution Data Configuration
       - EXECUTIONS_DATA_PRUNE=true # Enable execution data pruning
-      - EXECUTIONS_DATA_MAX_AGE=336 # Keep executions for 14 days
+      - EXECUTIONS_DATA_MAX_AGE=720 # Keep 30 days of executions data
       - EXECUTIONS_DATA_SAVE_ON_ERROR=all
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
       - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
 
       # Timezone Configuration
-      - TZ=Asia/Jerusalem\
+      - TZ=Asia/Jerusalem
 
       # Additional Settings
-      - N8N_METRICS=true  # Enable metrics endpoint
-      - N8N_DIAGNOSTICS_ENABLED=false  # Disable diagnostics in production
+      - N8N_METRICS=true # Enable metrics endpoint
+      - N8N_DIAGNOSTICS_ENABLED=false # Disable diagnostics in production
       - N8N_VERSION_NOTIFICATIONS_ENABLED=false
       - N8N_TEMPLATES_ENABLED=true
-      - N8N_ONBOARDING_FLOW_DISABLED=true  # Disable onboarding for production
+      - N8N_ONBOARDING_FLOW_DISABLED=true # Disable onboarding for production
+
+      # Memory and Performance - Optimized for large server
+      - NODE_OPTIONS=--max-old-space-size=6144 # 6GB heap for Node.js
+
+      # Additional performance settings
+      - N8N_PUSH_BACKEND=sse # Server-sent events for better performance
+      - N8N_PERSONALIZATION_ENABLED=false
+
     volumes:
       - ./data/n8n:/home/node/.n8n # N8N Temporary Files
     networks:
@@ -102,6 +132,15 @@ services:
       timeout: 15s
       retries: 5
       start_period: 30s
+    # Resource limits and allocation for N8N
+    deploy:
+      resources:
+        limits:
+          memory: 8G # Allow N8N to use up to 8GB
+          cpus: "4.0" # Allow up to 4 CPU cores
+        reservations:
+          memory: 2G # Reserve 2GB minimum
+          cpus: "1.0" # Reserve 1 CPU core
 
 networks:
   n8n_network:
