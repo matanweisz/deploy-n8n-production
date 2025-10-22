@@ -43,14 +43,38 @@ else
     echo "    Or run: newgrp docker"
 fi
 
-# Install Docker Compose
-echo "🔧 Installing Docker Compose..."
-if ! command -v docker-compose &>/dev/null; then
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
-    echo "✅ Docker Compose installed successfully"
+# Verify Docker Compose is available (modern Docker includes it)
+echo "🔧 Checking Docker Compose availability..."
+if docker compose version &>/dev/null; then
+    echo "✅ Docker Compose (plugin) is available"
+elif command -v docker-compose &>/dev/null; then
+    echo "✅ Docker Compose (standalone) is available"
 else
-    echo "✅ Docker Compose already installed"
+    echo "📥 Installing Docker Compose plugin..."
+    sudo apt-get update
+    sudo apt-get install -y docker-compose-plugin
+    echo "✅ Docker Compose installed successfully"
+fi
+
+# Verify required files exist
+echo "🔍 Verifying project files..."
+if [ ! -f .env.example ]; then
+    echo "❌ Error: .env.example file not found!"
+    echo "   Please ensure you're running this script from the project directory."
+    exit 1
+fi
+if [ ! -f docker-compose.yml ]; then
+    echo "❌ Error: docker-compose.yml file not found!"
+    echo "   Please ensure you're running this script from the project directory."
+    exit 1
+fi
+echo "✅ All required files found"
+
+# Ensure openssl is installed for key generation
+if ! command -v openssl &>/dev/null; then
+    echo "📦 Installing openssl..."
+    sudo apt-get update
+    sudo apt-get install -y openssl
 fi
 
 # Create .env file from example
@@ -71,25 +95,74 @@ sudo chmod 600 .env
 
 echo "✅ Security keys generated and updated in .env file"
 
+# Prompt for domain name
+echo ""
+echo "🌐 Domain Configuration"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Enter the domain name for your n8n instance"
+echo "Example: n8n.yourdomain.com"
+echo ""
+read -p "Domain name: " N8N_DOMAIN
+
+# Validate domain is not empty
+while [ -z "$N8N_DOMAIN" ]; do
+    echo "❌ Domain name cannot be empty"
+    read -p "Domain name: " N8N_DOMAIN
+done
+
+# Update domain in .env file
+sed -i "s|N8N_DOMAIN=<your-domain.com>|N8N_DOMAIN=${N8N_DOMAIN}|g" .env
+
+echo "✅ Domain configured: $N8N_DOMAIN"
+
 # Create data directories and set permissions
 echo "📁 Creating data directories..."
 mkdir -p data/postgres data/n8n
 sudo chown -R 999:999 data/postgres # PostgreSQL user
 sudo chown -R 1000:1000 data/n8n    # Node user for n8n
 
+# Start services with Docker Compose
 echo ""
-echo "🎉 N8N deployment completed successfully!"
+echo "🚢 Starting n8n services..."
+if docker compose version &>/dev/null; then
+    docker compose up -d
+else
+    docker-compose up -d
+fi
+
+# Wait a moment for services to initialize
+sleep 5
+
+# Check service status
 echo ""
-echo "📋 Next steps:"
-echo "1. Update your .env file with your actual domain name:"
-echo "   N8N_DOMAIN=your-domain.com"
+echo "📊 Service Status:"
+if docker compose version &>/dev/null; then
+    docker compose ps
+else
+    docker-compose ps
+fi
+
 echo ""
-echo "2. Configure your external nginx to proxy to this server"
-echo "   The n8n service will be available on port 5678"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🎉 N8N Deployment Completed Successfully!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "3. Start the services after updating .env:"
-echo "   docker compose up -d"
+echo "✅ Services Started:"
+echo "   • PostgreSQL Database"
+echo "   • n8n Workflow Automation"
 echo ""
-echo "4. Check services status:"
-echo "   docker compose ps"
-echo "   docker compose logs -f"
+echo "🌐 Your n8n instance:"
+echo "   Domain: https://$N8N_DOMAIN"
+echo "   Local: http://localhost:5678"
+echo ""
+echo "📋 Next Steps:"
+echo "   1. Configure your external reverse proxy (nginx/traefik) to:"
+echo "      • Proxy https://$N8N_DOMAIN to http://YOUR_SERVER_IP:5678"
+echo "      • Enable SSL/TLS certificates"
+echo "   2. Ensure your DNS points $N8N_DOMAIN to your server"
+echo "   3. Access n8n at https://$N8N_DOMAIN to complete setup"
+echo ""
+echo "📊 Useful Commands:"
+echo "   • View logs:    docker compose logs -f"
+echo "   • Stop services: docker compose down"
+echo "   • Restart:      docker compose restart"
